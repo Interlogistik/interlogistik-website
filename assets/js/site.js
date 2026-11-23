@@ -12,10 +12,9 @@
   };
 
   /* ------------------------------------------------------------ i18n */
-  const WORDS = {
-    en: ['pallet', 'factory', 'deadline', 'corridor', 'delivery'],
-    ro: ['palet', 'fabrică', 'termen', 'coridor', 'livrare'],
-  };
+  // HUD card: illustrative lanes across Europe, in both directions
+  const ROUTES = [['RO → DE', 'FTL'], ['IT → RO', 'Groupage'], ['RO → PL', 'FTL'], ['AT → RO', 'FTL'], ['RO → GR', 'Groupage'], ['HR → RO', 'Project cargo']];
+  const SERVICE_RO = { FTL: 'FTL', Groupage: 'Grupaj', 'Project cargo': 'Project cargo' };
   const STATUS = {
     en: { sending: 'Sending…', ok: 'Thank you. A planner will reply within one working day.', err: 'Something went wrong. Please email office@interlogistik-transport.com.', missing: 'Please fill in the highlighted fields.', nokey: 'Form not connected yet. Please email office@interlogistik-transport.com.' },
     ro: { sending: 'Se trimite…', ok: 'Mulțumim. Un dispecer îți răspunde în cel mult o zi lucrătoare.', err: 'A apărut o eroare. Te rugăm scrie la office@interlogistik-transport.com.', missing: 'Completează câmpurile marcate.', nokey: 'Formularul nu este încă conectat. Scrie-ne la office@interlogistik-transport.com.' },
@@ -31,29 +30,38 @@
   const hero = $('.hero');
   // the nav turns solid whenever a white block (curtain) sits under it, and clears over the photo scenes
   const curtains = $$('.curtain');
+  const darks = $$('[data-dark]');
+  const under = (n, y) => { const r = n.getBoundingClientRect(); return r.top < y && r.bottom > y; };
+  const mcta = $('#mcta'), quote = $('#quote');
   const onScroll = () => {
     const y = nav.offsetHeight / 2;
-    nav.classList.toggle('is-solid', curtains.some(c => { const r = c.getBoundingClientRect(); return r.top < y && r.bottom > y; }));
+    nav.classList.toggle('is-solid', curtains.some(c => under(c, y)) && !darks.some(d => under(d, y)));
+    // mobile quote button: hidden at the very top and while the form is on screen
+    if (mcta) {
+      const q = quote.getBoundingClientRect();
+      mcta.classList.toggle('is-hidden', scrollY < innerHeight * 0.5 || (q.top < innerHeight && q.bottom > 0));
+    }
   };
   addEventListener('scroll', onScroll, { passive: true });
   onScroll();
 
-  /* ------------------------------------------------------------ rotating word */
-  let rotIndex = 0;
-  const word = $('.rot__word');
-  if (!reduce) {
+  /* ------------------------------------------------------------ HUD route rotation */
+  const hudRoute = $('#hudRoute'), hudService = $('#hudService');
+  let routeIndex = 0;
+  if (!reduce && hudRoute) {
     setInterval(() => {
       if (document.hidden) return;
-      word.classList.add('is-out');
+      const tagR = hudRoute.closest('.hud__tag'), tagS = hudService.closest('.hud__tag');
+      tagR.classList.add('is-swap'); tagS.classList.add('is-swap');
       setTimeout(() => {
-        rotIndex = (rotIndex + 1) % WORDS[lang].length;
-        word.textContent = WORDS[lang][rotIndex];
-        word.classList.remove('is-out');
-        word.classList.add('is-in');
-        void word.offsetWidth;
-        word.classList.remove('is-in');
-      }, 420);
-    }, 2600);
+        routeIndex = (routeIndex + 1) % ROUTES.length;
+        const [r, sv] = ROUTES[routeIndex];
+        hudRoute.textContent = r;
+        hudService.textContent = lang === 'ro' ? SERVICE_RO[sv] : sv;
+        layoutHud();
+        tagR.classList.remove('is-swap'); tagS.classList.remove('is-swap');
+      }, 300);
+    }, 3200);
   }
 
   /* ------------------------------------------------------------ HUD tracking */
@@ -194,6 +202,11 @@
   }
 
   function frame() {
+    if (scene) heroFrame();
+    bandsFrame();
+    requestAnimationFrame(frame);
+  }
+  function heroFrame() {
     const [p, c] = sceneProgress();
     // calm easing: follow the wheel, never snap to it
     const ease = mqMobile.matches ? 0.16 : 0.1;
@@ -209,9 +222,6 @@
       }
       drawHud();
     }
-    scenes.forEach(sceneFrame);
-    insetFrame();
-    requestAnimationFrame(frame);
   }
 
   // Load a scrub clip as a Blob: seeking then never depends on HTTP range support.
@@ -228,80 +238,30 @@
     v.load();
   }
   // phones keep the still frame + zoom: no video download at all
-  let heroDone;
-  const heroLoaded = new Promise(r => { heroDone = r; });
   function loadScrub() {
-    if (mqMobile.matches) { heroDone(); return; }
-    loadClip(video, video.dataset.src, d => { duration = d; scrubOn = true; }, () => { poster.style.opacity = 0; heroDone(); });
-    setTimeout(heroDone, 6000); // never let a slow hero clip block the rest
+    if (mqMobile.matches) return;
+    loadClip(video, video.dataset.src, d => { duration = d; scrubOn = true; }, () => { poster.style.opacity = 0; });
   }
 
-  /* ------------------------------------------------------------ photo / video scenes
-     Same grammar as the hero: the stage rises in, pins while the frame pushes in
-     (and a clip scrubs), then the next white block rises over it. */
-  const scenes = $$('.scene--x').map(w => ({
-    w, stage: $('.stage', w), media: $('.stage__media', w), copy: $('.stage__copy', w),
-    v: $('.stage__video', w), src: w.dataset.video, near: false, loading: false, dur: 0, t: 0, ready: false,
-    sq: -1, sp: 0, sc: 0, first: true,
-  }));
-  const vh = () => innerHeight;
-  function loadSceneClip(s) {
-    if (s.loading || !s.src || !s.v || mqMobile.matches || reduce) return;
-    s.loading = true;
-    heroLoaded.then(() => loadClip(s.v, s.src, d => { s.dur = d; }, () => { s.ready = true; }));
-  }
-  const sceneIO = new IntersectionObserver(es => es.forEach(e => {
-    const s = scenes.find(x => x.w === e.target);
-    s.near = e.isIntersecting;
-    if (s.near) loadSceneClip(s);
-  }), { rootMargin: '120% 0px 120% 0px' });
-  scenes.forEach(s => sceneIO.observe(s.w));
-
-  function sceneFrame(s) {
-    const r = s.w.getBoundingClientRect(), H = vh();
-    if (r.top > H || r.bottom < 0) return;          // off screen: nothing runs
-    const mob = mqMobile.matches;
-    const stageH = s.stage.offsetHeight;
-    const pinPx = Math.max(1, s.w.offsetHeight - 2 * stageH);
-    const y = -r.top;
-    // q: 0 when the stage starts entering .. 1 when the pin ends (drives zoom + scrub)
-    const q = clamp01((y + stageH) / (pinPx + stageH));
-    const e = clamp01((y + stageH) / stageH);        // entrance
-    const c = clamp01((y - pinPx) / stageH);         // next block rising over it
-    const ease = s.first ? 1 : (mob ? 0.2 : 0.12);
-    s.first = false;
-    s.sp += (q - s.sp) * ease; s.sc += (c - s.sc) * ease;
-    if (Math.abs(q - s.sp) < 0.0005) s.sp = q;
-    if (Math.abs(c - s.sc) < 0.0005) s.sc = c;
-    const zoom = 1 + (mob ? 0.08 : 0.12) * s.sp;
-    // the frame travels slower than the page while it rises in, then sinks a little under the curtain
-    const drift = -(1 - e) * stageH * 0.12 + s.sc * (mob ? 30 : 70);
-    s.media.style.transform = `translate3d(0, ${drift.toFixed(1)}px, 0) scale(${zoom.toFixed(4)})`;
-    const lift = (1 - smooth(0.35, 1, e)) * 40 - s.sp * (mob ? 10 : 30) - s.sc * (mob ? 50 : 140);
-    s.copy.style.transform = `translate3d(0, ${lift.toFixed(1)}px, 0)`;
-    s.copy.style.opacity = (smooth(0.35, 0.9, e) * (1 - smooth(0.15, 0.7, s.sc))).toFixed(3);
-    if (s.ready && s.dur && !mob) {
-      const target = s.sp * (s.dur - 0.06);
-      s.t += (target - s.t) * 0.35;
-      if (!s.v.seeking && Math.abs(s.v.currentTime - s.t) > 1 / 60) s.v.currentTime = s.t;
-    }
-  }
-
-  /* inset photos: the image drifts inside its frame */
-  const insets = $$('.inset img');
-  function insetFrame() {
-    const H = vh();
-    insets.forEach(img => {
-      const r = img.parentNode.getBoundingClientRect();
+  /* ------------------------------------------------------------ photo bands
+     In-flow, never pinned: the photo eases out of a slight zoom and the title
+     lifts a little as the band crosses the screen (transform + opacity only). */
+  const bands = $$('.band').map(b => ({ b, img: $('.band__img', b), copy: $('.band__copy', b) }));
+  function bandsFrame() {
+    const H = innerHeight;
+    bands.forEach(({ b, img, copy: c }) => {
+      const r = b.getBoundingClientRect();
       if (r.bottom < 0 || r.top > H) return;
-      const k = ((r.top + r.height / 2) - H / 2) / H; // -0.5..0.5 across the screen
-      img.style.transform = `translate3d(0, ${(k * -0.14 * r.height).toFixed(1)}px, 0)`;
+      const k = clamp01((H - r.top) / (H + r.height));   // 0 entering .. 1 leaving
+      img.style.transform = `scale(${(1.14 - 0.14 * k).toFixed(4)})`;
+      c.style.transform = `translate3d(0, ${((0.5 - k) * 60).toFixed(1)}px, 0)`;
+      c.style.opacity = smooth(0.12, 0.42, k).toFixed(3);
     });
   }
   const clock = $('#hudClock');
-  setInterval(() => { const d = new Date(); clock.textContent = d.toTimeString().slice(0, 8); }, 1000);
+  if (clock) setInterval(() => { const d = new Date(); clock.textContent = d.toTimeString().slice(0, 8); }, 1000);
 
-  addEventListener('resize', () => { layoutHud(); drawHud(); });
+  addEventListener('resize', () => { if (scene) { layoutHud(); drawHud(); } });
 
   /* ------------------------------------------------------------ maps (data loads lazily, ~38 KB gzipped) */
   const net = $('#netMap'), trk = $('#trkMap');
@@ -320,7 +280,7 @@
       pat('hatchInk', 2.8, '#2a2a2a', .65);
       pat('hatchInk2', 2.2, '#0b0b0c', .9);
     }
-    const NET = ['Austria', 'Italy', 'Croatia', 'Germany', 'Poland', 'Greece', 'Turkey', 'Iraq'];
+    const NET = ['Austria', 'Italy', 'Croatia', 'Slovenia', 'Germany', 'Poland', 'Greece', 'Turkey', 'Iraq'];
     function countries(svg, id, home) {
       const g = el('g', {}, svg);
       M.countries.forEach(c => {
@@ -340,13 +300,12 @@
       const lanesG = el('g', {}, net);
       const CITY = { vienna: 'Vienna', milan: 'Milan', zagreb: 'Zagreb', munich: 'Munich', stuttgart: 'Stuttgart', wroclaw: 'Wrocław', bologna: 'Bologna' };
       const laneEls = [];
+      // which drawn lane lights up for each row of the list
+      const KEY = { vienna: 'at', milan: 'it', zagreb: 'hr si', munich: 'de', wroclaw: 'pl' };
       Object.values(M.lanes).forEach(l => {
-        const p = el('path', { d: pts2d(l.pts), class: 'map-lane' }, lanesG);
-        laneEls.push(p);
+        laneEls.push(el('path', { d: pts2d(l.pts), class: 'map-lane', 'data-k': KEY[l.to] || '' }, lanesG));
       });
-      const gr = el('path', { d: pts2d(M.route.map(r => r.xy)), class: 'map-lane map-lane--gr', pathLength: 1 }, lanesG);
-      gr.style.strokeDasharray = '1'; gr.style.strokeDashoffset = reduce ? '0' : '1';
-      gr.style.transition = 'stroke-dashoffset 2.2s cubic-bezier(.2,.7,.1,1) .3s';
+      laneEls.push(el('path', { d: pts2d(M.route.map(r => r.xy)), class: 'map-lane', 'data-k': 'gr' }, lanesG));
       laneEls.forEach((p, i) => { p.style.opacity = reduce ? 1 : 0; p.style.transition = `opacity .8s ease ${0.5 + i * 0.15}s`; });
       const lbl = (x, y, text, anchor = 'start', dx = 8, dy = 3) => {
         const t = el('text', { x: x + dx, y: y + dy, class: 'map-lbl map-lbl--bg', 'text-anchor': anchor }, lanesG);
@@ -364,7 +323,7 @@
       const curve = pts => { let d = 'M' + pts[0].join(','); for (let i = 1; i < pts.length; i++) { const p = pts[i - 1], q = pts[i]; const mx = (p[0] + q[0]) / 2, my = (p[1] + q[1]) / 2 - Math.hypot(q[0] - p[0], q[1] - p[1]) * 0.08; d += ` Q${mx.toFixed(1)},${my.toFixed(1)} ${q.join(',')}`; } return d; };
       const ai0 = M.cities.albaiulia;
       [[ai0, EAST.bucharest, EAST.istanbul, EAST.ankara], [EAST.ankara, EAST.gaziantep, EAST.baghdad]].forEach((pts, i) => {
-        const p = el('path', { d: curve(pts), class: 'map-lane' }, lanesG);
+        const p = el('path', { d: curve(pts), class: 'map-lane', 'data-k': 'tr' }, lanesG);
         p.style.opacity = reduce ? 1 : 0; p.style.transition = `opacity .8s ease ${1.3 + i * 0.2}s`;
         laneEls.push(p);
       });
@@ -380,45 +339,47 @@
       el('circle', { cx: ai[0], cy: ai[1], r: 9, fill: 'rgba(255,90,31,.18)' }, lanesG);
       el('circle', { cx: ai[0], cy: ai[1], r: 4.5, class: 'map-home' }, lanesG);
       lbl(ai[0], ai[1], 'Alba Iulia', 'start', 12, -8);
-      net._reveal = () => { gr.style.strokeDashoffset = '0'; laneEls.forEach(p => { p.style.opacity = 1; }); };
+      net._reveal = () => { laneEls.forEach(p => { p.style.opacity = 1; }); };
+      net._light = k => laneEls.forEach(p => p.classList.toggle('is-on', !!k && (p.dataset.k || '').split(' ').includes(k)));
     }
 
-    /* ------------------------------------------------------------ tracking card map */
-    const LONLAT = [[23.580, 46.067], [23.570, 45.957], [24.152, 45.793], [24.369, 45.100], [24.260, 44.660], [23.794, 44.330], [22.934, 43.990], [22.876, 43.990], [23.226, 43.412], [23.550, 43.210], [23.322, 42.698], [23.094, 42.021], [23.360, 41.390], [23.548, 41.086], [22.944, 40.640]];
+    /* ------------------------------------------------------------ tracking card map: Alba Iulia -> Munich (illustrative) */
     if (trk && M) {
-      const route = M.route.slice(0, 15);
-      trk.setAttribute('viewBox', '560 462 360 184');
+      const pts = Object.values(M.lanes).find(l => l.to === 'munich').pts;
+      // cumulative length along the drawn lane stands in for distance
+      const cum = [0];
+      for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+      const total = cum[cum.length - 1];
+      trk.setAttribute('viewBox', '478 404 280 130');
       defs(trk, 'T');
       countries(trk, 'T', false);
       const g = el('g', {}, trk);
-      const full = el('path', { d: pts2d(route.map(r => r.xy)), fill: 'none', stroke: '#0b0b0c', 'stroke-width': 1.2, 'stroke-dasharray': '2 2.5', opacity: .45 }, g);
-      const done = el('path', { d: pts2d(route.map(r => r.xy)), fill: 'none', stroke: '#0b0b0c', 'stroke-width': 2, pathLength: 1, 'stroke-dasharray': 1, 'stroke-dashoffset': 1, 'stroke-linecap': 'round' }, g);
-      const a = route[0].xy, b = route[14].xy;
-      el('circle', { cx: a[0], cy: a[1], r: 3, fill: '#0b0b0c' }, g);
-      el('circle', { cx: b[0], cy: b[1], r: 4, fill: '#fff', stroke: '#0b0b0c', 'stroke-width': 1.4 }, g);
-      const halo = el('circle', { r: 8, fill: 'rgba(255,90,31,.2)' }, g);
-      const dot = el('circle', { r: 4, fill: '#ff5a1f', stroke: '#fff', 'stroke-width': 1.4 }, g);
-      const tl = (p, text, anchor, dx, dy) => { const t = el('text', { x: p[0] + dx, y: p[1] + dy, class: 'map-lbl map-lbl--bg', 'text-anchor': anchor, style: 'font-size:7.5px' }, g); t.textContent = text; };
-      tl(a, 'Alba Iulia', 'end', -7, 3);
-      tl(b, 'Thessaloniki', 'start', 9, 3);
-      tl(route[10].xy, 'Sofia', 'start', 9, 3);
-
-      const totalKm = route[14].km, target = route[10].km / totalKm; // Sofia
+      el('path', { d: pts2d(pts), fill: 'none', stroke: '#0b0b0c', 'stroke-width': 1, 'stroke-dasharray': '2 2.5', opacity: .45 }, g);
+      const done = el('path', { d: pts2d(pts), fill: 'none', stroke: '#0b0b0c', 'stroke-width': 1.8, pathLength: 1, 'stroke-dasharray': 1, 'stroke-dashoffset': 1, 'stroke-linecap': 'round' }, g);
+      const a = pts[0], b = pts[pts.length - 1], v = M.cities.vienna;
+      el('circle', { cx: a[0], cy: a[1], r: 2.6, fill: '#0b0b0c' }, g);
+      el('circle', { cx: b[0], cy: b[1], r: 3.4, fill: '#fff', stroke: '#0b0b0c', 'stroke-width': 1.2 }, g);
+      const halo = el('circle', { r: 7, fill: 'rgba(255,90,31,.2)' }, g);
+      const dot = el('circle', { r: 3.4, fill: '#ff5a1f', stroke: '#fff', 'stroke-width': 1.2 }, g);
+      const tl = (p, text, anchor, dx, dy) => { const t = el('text', { x: p[0] + dx, y: p[1] + dy, class: 'map-lbl map-lbl--bg', 'text-anchor': anchor, style: 'font-size:7px' }, g); t.textContent = text; };
+      tl(a, 'Alba Iulia', 'end', -6, 12);
+      tl(b, lang === 'ro' ? 'München' : 'Munich', 'start', -4, -8);
+      tl(v, lang === 'ro' ? 'Viena' : 'Vienna', 'start', 4, -7);
+      // the truck is "now" at the point of the lane nearest Vienna
+      const dV = p => Math.hypot(p[0] - v[0], p[1] - v[1]);
+      let vi = 0; pts.forEach((p, i) => { if (dV(p) < dV(pts[vi])) vi = i; });
+      const target = cum[vi] / total;
+      // GPS chip: straight interpolation between the two ends (illustration only)
+      const A = [23.58, 46.07], B = [11.58, 48.14];
       const bar = $('#trkBar'), chip = $('#trkChip');
-      const at = f => {
-        const km = f * totalKm;
-        let i = 0; while (i < 13 && route[i + 1].km < km) i++;
-        const u = (km - route[i].km) / ((route[i + 1].km - route[i].km) || 1);
-        const lerp = (p, q) => [p[0] + (q[0] - p[0]) * u, p[1] + (q[1] - p[1]) * u];
-        return { xy: lerp(route[i].xy, route[i + 1].xy), ll: lerp(LONLAT[i], LONLAT[i + 1]) };
-      };
       const set = f => {
-        const p = at(f);
-        dot.setAttribute('cx', p.xy[0]); dot.setAttribute('cy', p.xy[1]);
-        halo.setAttribute('cx', p.xy[0]); halo.setAttribute('cy', p.xy[1]);
+        const d = f * total; let i = 0; while (i < pts.length - 2 && cum[i + 1] < d) i++;
+        const u = (d - cum[i]) / ((cum[i + 1] - cum[i]) || 1);
+        const x = pts[i][0] + (pts[i + 1][0] - pts[i][0]) * u, y = pts[i][1] + (pts[i + 1][1] - pts[i][1]) * u;
+        dot.setAttribute('cx', x); dot.setAttribute('cy', y); halo.setAttribute('cx', x); halo.setAttribute('cy', y);
         done.setAttribute('stroke-dashoffset', 1 - f);
         bar.style.width = (f * 100).toFixed(1) + '%';
-        chip.textContent = `GPS · ${p.ll[1].toFixed(2)}°N ${p.ll[0].toFixed(2)}°E`;
+        chip.textContent = `GPS · ${(A[1] + (B[1] - A[1]) * f).toFixed(2)}°N ${(A[0] + (B[0] - A[0]) * f).toFixed(2)}°E`;
       };
       set(reduce ? target : 0);
       trkAnim = () => {
@@ -428,16 +389,11 @@
           const k = Math.min(1, (now - t0) / D), e = 1 - Math.pow(1 - k, 3);
           set(e * target);
           if (k < 1) requestAnimationFrame(step);
-          else {
-            // keep creeping slowly forward like a live feed
-            let f = target; const creep = () => { f = Math.min(target + 0.03, f + 0.00004); set(f); requestAnimationFrame(creep); };
-            requestAnimationFrame(creep);
-          }
+          else { let f = target; const creep = () => { f = Math.min(target + 0.03, f + 0.00004); set(f); requestAnimationFrame(creep); }; requestAnimationFrame(creep); }
         };
         requestAnimationFrame(step);
       };
     }
-
 
     mapsReady = true;
     if (pendingReveal.has('trk') && trkAnim) trkAnim();
@@ -469,16 +425,34 @@
     n.classList.add('is-in');
     if (n.classList.contains('ui--track')) { if (mapsReady && trkAnim) trkAnim(); else pendingReveal.add('trk'); }
     if (n.classList.contains('net')) { if (mapsReady && net._reveal) net._reveal(); else pendingReveal.add('net'); }
-    if (n.classList.contains('number')) countUp();
+    if (n.querySelector('#countUp')) countUp();
     io.unobserve(n);
   }), { threshold: 0.18, rootMargin: '0px 0px -6% 0px' });
   $$('.reveal').forEach(n => io.observe(n));
 
   /* ------------------------------------------------------------ form */
-  $$('[data-dir]').forEach(a => a.addEventListener('click', () => {
-    const r = $(`input[name="direction"][value="Europe → Romania"]`); if (r) r.checked = true;
-  }));
   const form = $('#quoteForm'), status = $('#formStatus');
+  // a lane in the list pre-fills the destination; a service link pre-selects the transport type
+  $$('[data-dest]').forEach(a => a.addEventListener('click', () => {
+    form.to.value = a.dataset.dest;
+    const r = $('input[name="direction"][value="Romania → Europe"]', form); if (r) r.checked = true;
+  }));
+  $$('.net__list li').forEach(li => {
+    const k = (li.querySelector('[data-lane]') || {}).dataset?.lane;
+    const light = on => { if (net && net._light) net._light(on ? k : null); };
+    li.addEventListener('mouseenter', () => light(true));
+    li.addEventListener('mouseleave', () => light(false));
+    li.addEventListener('focusin', () => light(true));
+    li.addEventListener('focusout', () => light(false));
+  });
+  $$('[data-service]').forEach(a => a.addEventListener('click', () => {
+    const r = $(`input[name="transport_type"][value="${a.dataset.service}"]`, form); if (r) r.checked = true;
+  }));
+  // ?to=…&from=…&type=… in the URL (for the lane pages) pre-fills the same way
+  const qs = new URLSearchParams(location.search);
+  if (qs.get('to')) form.to.value = qs.get('to');
+  if (qs.get('from')) form.from.value = qs.get('from');
+  if (qs.get('type')) { const r = $(`input[name="transport_type"][value="${CSS.escape(qs.get('type'))}"]`, form); if (r) r.checked = true; }
   form.addEventListener('submit', async ev => {
     ev.preventDefault();
     const S = STATUS[lang];
@@ -504,6 +478,8 @@
 
   /* ------------------------------------------------------------ boot */
   const start = () => {
+    // lane pages have no video hero: only the photo band and the page reveals run
+    if (!scene) { if (!reduce) requestAnimationFrame(frame); return; }
     layoutHud(); hud.classList.add('is-on');
     if (reduce) { drawHud(); return; } // static frame: poster, every tag shown, no scrub
     loadScrub();
