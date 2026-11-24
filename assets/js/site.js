@@ -453,6 +453,7 @@
   if (qs.get('to')) form.to.value = qs.get('to');
   if (qs.get('from')) form.from.value = qs.get('from');
   if (qs.get('type')) { const r = $(`input[name="transport_type"][value="${CSS.escape(qs.get('type'))}"]`, form); if (r) r.checked = true; }
+  if (qs.get('dir') === 'in') { const r = $('input[name="direction"][value="Europe → Romania"]', form); if (r) r.checked = true; }
   form.addEventListener('submit', async ev => {
     ev.preventDefault();
     const S = STATUS[lang];

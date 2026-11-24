@@ -532,3 +532,44 @@ em { font-family: var(--serif); font-style: italic; font-weight: 400; color: var
   .dirs { margin-top: 32px; }
   .transit div { grid-template-columns: 100px 1fr; }
 }
+
+/* =====================================================================
+   lane pages: answer-first blocks (question H2s, transit table, reverse direction)
+   ===================================================================== */
+.lanefacts--one { grid-template-columns: 1fr; }
+.lanetable { margin-top: 20px; border: 1px solid var(--line); border-radius: 14px; padding: 24px; }
+.lanetable__k { margin: 0 0 14px; color: var(--accent); font-size: 10.5px; }
+.lanetable table { width: 100%; border-collapse: collapse; font-size: 16px; }
+.lanetable thead th { text-align: left; font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; font-weight: 400; color: var(--mute); padding: 0 16px 10px 0; border-bottom: 1px solid var(--ink); }
+.lanetable tbody th, .lanetable td { text-align: left; vertical-align: top; padding: 14px 16px 14px 0; border-bottom: 1px solid var(--line-2); }
+.lanetable tbody th { font-size: 11.5px; color: var(--ink); padding-top: 17px; white-space: nowrap; width: 150px; }
+.lanetable td:nth-child(2) { font-weight: 500; width: 34%; }
+.lanetable td:nth-child(3) { color: var(--mute); }
+.lanetable .transit__note { margin-top: 14px; }
+
+.split--faq .sec__head { position: sticky; top: 96px; }
+.qa__title { font-size: clamp(32px, 3.6vw, 52px); }
+.qa { border-top: 1px solid var(--ink); }
+.qa__item { padding: 26px 0 28px; border-bottom: 1px solid var(--line-2); }
+.qa__q { margin: 0 0 10px; font-size: 21px; font-weight: 500; letter-spacing: -.015em; line-height: 1.25; }
+.qa__item p { margin: 0; color: var(--mute); font-size: 16px; max-width: 40em; }
+
+.rev { max-width: 52em; }
+.rev .h2.rev__q { font-size: clamp(32px, 3.8vw, 54px); line-height: 1.05; margin: 0 0 22px; }
+.rev__a { margin: 0 0 28px; font-size: 18px; color: var(--mute); max-width: 40em; }
+
+@media (max-width: 1080px) {
+  .split--faq .sec__head { position: static; }
+}
+@media (max-width: 640px) {
+  .lanetable { padding: 18px; }
+  .lanetable thead { display: none; }
+  .lanetable tr { display: grid; gap: 4px; padding: 14px 0; border-bottom: 1px solid var(--line-2); }
+  .lanetable tbody th, .lanetable td { display: block; padding: 0; border: 0; width: auto; }
+  .lanetable tbody th { padding: 0 0 4px; }
+  .lanetable td:nth-child(2), .lanetable td:nth-child(3) { width: auto; }
+  .lanetable td::before { content: attr(data-label); display: block; margin-bottom: 2px; font-family: var(--mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--mute); font-weight: 400; }
+  .lanetable td + td { margin-top: 8px; }
+  .qa__q { font-size: 19px; }
+  .rev__a { font-size: 16.5px; }
+}
